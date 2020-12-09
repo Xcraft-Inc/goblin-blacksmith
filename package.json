@@ -1,0 +1,32 @@
+{
+  "name": "goblin-blacksmith",
+  "version": "0.0.1",
+  "description": "Backend renderer",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "config": {
+    "xcraft": {
+      "commands": true
+    }
+  },
+  "dependencies": {
+    "gigawatts": "^4.0.5",
+    "goblin-webpack": "^1.0.4",
+    "@react-pdf/renderer": "^1.6.12",
+    "@react-pdf/styled-components": "^1.4.0",
+    "uuid": "^3.3.2",
+    "xcraft-core-goblin": "^4.0.5",
+    "xcraft-core-host": "^2.3.0",
+    "xcraft-core-fs": "^2.1.0",
+    "xcraft-core-utils": "^3.1.2"
+  },
+  "devDependencies": {
+    "prettier": "2.0.4",
+    "xcraft-dev-prettier": "^2.0.0",
+    "xcraft-dev-rules": "^2.0.0"
+  },
+  "prettier": "xcraft-dev-prettier"
+}
