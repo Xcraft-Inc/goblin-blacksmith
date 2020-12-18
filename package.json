@@ -15,7 +15,6 @@
   },
   "dependencies": {
     "gigawatts": "^4.0.5",
-    "goblin-webpack": "^1.0.4",
     "@react-pdf/renderer": "^1.6.12",
     "@react-pdf/styled-components": "^1.4.0",
     "uuid": "^8.3.2",
@@ -26,6 +25,7 @@
     "xcraft-core-utils": "^3.1.2"
   },
   "devDependencies": {
+    "goblin-webpack": "^1.0.4",
     "prettier": "2.0.4",
     "xcraft-dev-prettier": "^2.0.0",
     "xcraft-dev-rules": "^2.0.0"
