@@ -12,6 +12,12 @@ module.exports = [
   },
   {
     type: 'list',
+    name: 'renderers.root',
+    message: 'List of root renderers to build',
+    default: [],
+  },
+  {
+    type: 'list',
     name: 'renderers.pdf',
     message: 'List of PDF renderers to build',
     default: [],
