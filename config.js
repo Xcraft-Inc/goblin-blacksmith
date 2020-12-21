@@ -5,6 +5,12 @@
  */
 module.exports = [
   {
+    type: 'input',
+    name: 'outputDir',
+    message: 'output directory name',
+    default: 'blacksmith',
+  },
+  {
     type: 'list',
     name: 'renderers.component',
     message: 'List of component renderers to build',
