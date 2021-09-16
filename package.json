@@ -27,7 +27,7 @@
     "xcraft-core-goblin": "^5.0.0",
     "xcraft-core-host": "^3.0.0",
     "xcraft-core-fs": "^2.1.0",
-    "xcraft-core-utils": "^3.1.2"
+    "xcraft-core-utils": "^4.0.0"
   },
   "devDependencies": {
     "goblin-webpack": "^2.0.0",
