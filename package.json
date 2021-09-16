@@ -23,14 +23,14 @@
     "react-redux": "^7.1.0",
     "uuid": "^8.3.2",
     "v8-compile-cache": "^2.2.0",
-    "xcraft-core-etc": "^2.1.0",
-    "xcraft-core-goblin": "^4.0.5",
-    "xcraft-core-host": "^2.3.0",
+    "xcraft-core-etc": "^3.0.0",
+    "xcraft-core-goblin": "^5.0.0",
+    "xcraft-core-host": "^3.0.0",
     "xcraft-core-fs": "^2.1.0",
     "xcraft-core-utils": "^3.1.2"
   },
   "devDependencies": {
-    "goblin-webpack": "^1.0.4",
+    "goblin-webpack": "^2.0.0",
     "prettier": "2.0.4",
     "xcraft-dev-prettier": "^2.0.0",
     "xcraft-dev-rules": "^2.0.0"
