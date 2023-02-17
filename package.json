@@ -1,6 +1,6 @@
 {
   "name": "goblin-blacksmith",
-  "version": "2.1.0",
+  "version": "2.1.2",
   "description": "Backend renderer",
   "scripts": {
     "postinstall": "node ./lib/postinstall.js",
