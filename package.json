@@ -1,6 +1,6 @@
 {
   "name": "goblin-blacksmith",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "description": "Backend renderer",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
