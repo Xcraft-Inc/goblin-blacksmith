@@ -1,8 +1,8 @@
-# 📘 Documentation du module goblin-blacksmith
+# 📘 goblin-blacksmith
 
 ## Aperçu
 
-Le module **goblin-blacksmith** est un moteur de rendu backend pour l'écosystème Xcraft. Il permet de générer du contenu HTML, CSS et PDF à partir de composants React côté serveur, sans interface utilisateur. Ce module est particulièrement utile pour la génération de rapports, d'exports PDF, et le rendu statique de composants pour l'optimisation SEO ou la mise en cache.
+Le module **goblin-blacksmith** est un moteur de rendu backend pour l'écosystème Xcraft. Il permet de générer du contenu HTML, CSS et PDF à partir de composants React côté serveur, sans interface utilisateur. Ce module est particulièrement utile pour la génération de rapports, d'exports PDF, et le rendu statique de composants pour la mise en cache ou l'intégration dans des flux de traitement automatisés.
 
 ## Sommaire
 
@@ -12,36 +12,53 @@ Le module **goblin-blacksmith** est un moteur de rendu backend pour l'écosystè
 - [Interactions avec d'autres modules](#interactions-avec-dautres-modules)
 - [Configuration avancée](#configuration-avancée)
 - [Détails des sources](#détails-des-sources)
+- [Licence](#licence)
 
 ## Structure du module
 
 Le module s'organise autour de plusieurs composants clés :
 
-- **Service principal** (`service.js`) : Acteur Goblin singleton qui orchestre le rendu
-- **Processus enfant** (`child-renderer/`) : Environnement isolé pour le rendu React
-- **Renderers spécialisés** : Moteurs de rendu pour différents formats (HTML, PDF)
-- **Configuration** : Paramètres pour les répertoires de sortie et les renderers
+- **Service principal** (`lib/service.js`) : Acteur Goblin singleton qui orchestre le rendu
+- **Processus enfant** (`lib/child-renderer/`) : Environnement isolé pour l'exécution du rendu React
+- **Renderers spécialisés** (`lib/child-renderer/renderers/`) : Moteurs de rendu pour les formats HTML/CSS et PDF
+- **Configuration** (`config.js`) : Paramètres pour les répertoires de sortie et les renderers pré-compilés
 
 ## Fonctionnement global
 
 Le module fonctionne selon une architecture de processus séparés :
 
-1. **Processus principal** : L'acteur `blacksmith` reçoit les demandes de rendu
-2. **Processus enfant** : Un processus Node.js isolé effectue le rendu React
-3. **Communication IPC** : Les données transitent via des messages entre processus
-4. **Compilation dynamique** : Webpack compile les composants à la demande
-5. **Rendu statique** : Les composants React sont rendus en HTML/CSS statique
+1. **Processus principal** : L'acteur `blacksmith` reçoit les demandes de rendu via le bus Xcraft
+2. **Compilation Webpack** : Si nécessaire, un bundle est compilé dynamiquement via `goblin-webpack`
+3. **Processus enfant** : Un processus Node.js isolé (`child-renderer/index.js`) exécute le rendu React
+4. **Communication IPC** : Les demandes et résultats transitent par messages entre processus via `requestId`
+5. **Rendu statique** : Les composants React sont rendus en HTML/CSS statique ou en PDF
 
-Le système utilise des verrous (mutex) pour éviter les conflits lors de rendus simultanés et met en cache les builds Webpack pour optimiser les performances.
+Le système utilise des verrous mutex pour sérialiser les rendus simultanés et met en cache les builds Webpack pour optimiser les performances.
 
 ### Architecture des processus
 
-Le module utilise une approche multi-processus pour isoler le rendu :
+```
+Processus principal (blacksmith)
+│
+├── backendRendererLock (mutex)
+│
+├── _renderIndex() ──► Webpack build (si nécessaire)
+│
+└── _render()
+      │
+      └── startProcess(outputFilename)
+            │
+            └── child-renderer/index.js (processus enfant)
+                  │
+                  ├── IPC message: {requestId, backend, args}
+                  │
+                  └── render(backend, args)
+                        ├── renderers/component.js
+                        ├── renderers/root.js
+                        └── renderers/pdf.js
+```
 
-- **Processus principal** : Gère les demandes et coordonne les rendus
-- **Processus enfants** : Chaque composant peut avoir son propre processus de rendu
-- **Verrous** : Système de mutex pour éviter les conflits de rendu simultanés
-- **Cache** : Les builds Webpack sont mis en cache pour optimiser les performances
+Le processus enfant est identifié par le nom du fichier de bundle (`outputFilename`), ce qui permet d'avoir un processus dédié par composant compilé. Pour le rendu PDF, le processus enfant est systématiquement arrêté après chaque rendu afin d'éviter les fuites mémoire.
 
 ## Exemples d'utilisation
 
@@ -50,7 +67,7 @@ Le module utilise une approche multi-processus pour isoler le rendu :
 ```javascript
 // Rendu d'un widget avec état Redux
 const {html, css} = await this.quest.cmd('blacksmith.renderComponent', {
-  mainGoblin: 'laboratory',
+  mainGoblin: 'my-app',
   widgetPath: './widgets/my-component/widget.js',
   props: {title: 'Mon titre', data: myData},
   labId: 'lab@main',
@@ -66,166 +83,174 @@ const {html, css} = await this.quest.cmd('blacksmith.renderComponent', {
 ```javascript
 // Rendu d'un document PDF
 await this.quest.cmd('blacksmith.renderPDF', {
-  mainGoblin: 'laboratory',
+  mainGoblin: 'my-app',
   documentPath: './documents/invoice/widget.js',
   props: {invoice: invoiceData},
   outputDir: '/tmp/invoices/invoice-123.pdf',
 });
 ```
 
-### Sauvegarde de composant en fichiers
+### Sauvegarde d'un composant en fichiers HTML/CSS
 
 ```javascript
 // Rendu et sauvegarde automatique
 const {htmlFilePath, cssFilePath} = await this.quest.cmd(
   'blacksmith.renderComponentToFile',
   {
-    mainGoblin: 'laboratory',
+    mainGoblin: 'my-app',
     widgetPath: './widgets/report/widget.js',
     props: {reportData},
     labId: 'lab@main',
     state: reduxState,
     outputDir: '/tmp/reports',
     outputName: 'monthly-report',
-    isRoot: true,
+    isRoot: false,
   }
 );
 ```
 
+### Rendu d'un composant racine
+
+```javascript
+// Rendu d'un composant racine d'application (isRoot: true)
+const {html, css} = await this.quest.cmd('blacksmith.renderComponent', {
+  mainGoblin: 'my-app',
+  widgetPath: './widgets/app-root/widget.js',
+  props: {},
+  labId: 'lab@main',
+  state: reduxState,
+  isRoot: true,
+});
+```
+
 ## Interactions avec d'autres modules
 
-- **[goblin-laboratory]** : Fournit les composants Widget et le système de thèmes
-- **[goblin-webpack]** : Compile les composants à la demande pour le rendu
-- **[xcraft-core-process]** : Gère les processus enfants pour l'isolation
-- **[xcraft-core-etc]** : Charge la configuration du module
-- **[xcraft-core-fs]** : Opérations sur le système de fichiers
+- **[goblin-laboratory]** : Fournit les composants `Frame`, `Widget`, le store Redux et le système de thèmes utilisés par les renderers
+- **[goblin-webpack]** : Compile les composants à la demande via la commande `webpack.pack` pour générer les bundles de rendu
+- **[xcraft-core-process]** : Gère le fork et la communication avec les processus enfants
+- **[xcraft-core-etc]** : Charge la configuration du module (`goblin-blacksmith` et `xcraft`)
+- **[xcraft-core-fs]** : Opérations sur le système de fichiers (création de répertoires)
+- **[xcraft-core-host]** : Fournit les chemins `projectPath` et `resourcesPath` pour localiser les ressources
+- **[xcraft-core-utils]** : Fournit le système de verrous mutex (`locks.getMutex`)
 
 ## Configuration avancée
 
 | Option                | Description                                          | Type     | Valeur par défaut |
 | --------------------- | ---------------------------------------------------- | -------- | ----------------- |
 | `outputDir`           | Répertoire de sortie pour les renderers pré-compilés | `string` | `'blacksmith'`    |
-| `renderers.component` | Liste des renderers de composants à construire       | `array`  | `[]`              |
-| `renderers.root`      | Liste des renderers racine à construire              | `array`  | `[]`              |
-| `renderers.pdf`       | Liste des renderers PDF à construire                 | `array`  | `[]`              |
+| `renderers.component` | Liste des renderers de composants à pré-construire   | `array`  | `[]`              |
+| `renderers.root`      | Liste des renderers racine à pré-construire          | `array`  | `[]`              |
+| `renderers.pdf`       | Liste des renderers PDF à pré-construire             | `array`  | `[]`              |
+
+Lorsqu'un renderer est pré-compilé et référencé dans la configuration, le module recherche d'abord un fichier de bundle dans `{resourcesPath}/{outputDir}/.{filename}` avant de lancer une compilation Webpack à la volée.
 
 ### Variables d'environnement
 
-| Variable           | Description                                           | Exemple            | Valeur par défaut        |
-| ------------------ | ----------------------------------------------------- | ------------------ | ------------------------ |
-| `NODE_ENV`         | Mode d'exécution, active le debugger en développement | `development`      | -                        |
-| `BABEL_CACHE_PATH` | Chemin du cache Babel pour la compilation             | `/tmp/babel-cache` | `{xcraftRoot}/var/babel` |
+| Variable           | Description                                                     | Exemple            | Valeur par défaut        |
+| ------------------ | --------------------------------------------------------------- | ------------------ | ------------------------ |
+| `NODE_ENV`         | Mode d'exécution ; active le débogueur Node.js en développement | `development`      | —                        |
+| `BABEL_CACHE_PATH` | Chemin du cache Babel pour la compilation Webpack               | `/tmp/babel-cache` | `{xcraftRoot}/var/babel` |
+
+En mode `development`, le processus enfant est démarré avec l'option `--inspect=27773` pour permettre l'attachement d'un débogueur.
 
 ## Détails des sources
 
-### `service.js`
+### `lib/service.js`
 
-Acteur Goblin singleton qui orchestre tout le système de rendu. Il gère le cycle de vie des processus enfants, la compilation Webpack, et expose les méthodes de rendu publiques.
+Acteur Goblin singleton qui orchestre tout le système de rendu. Il gère le cycle de vie des processus enfants, la compilation Webpack et expose les méthodes de rendu publiques sur le bus Xcraft.
 
 #### Cycle de vie de l'acteur
 
-L'acteur `blacksmith` est créé en tant que singleton et reste actif pendant toute la durée de vie de l'application. Il maintient une collection de processus enfants et gère leur cycle de vie selon les besoins.
+L'acteur `blacksmith` est créé en tant que singleton (`Goblin.createSingle`) et reste actif pendant toute la durée de vie de l'application. Il ne possède pas de logique d'état Redux (`logicState` et `logicHandlers` sont vides) ; toute la gestion d'état se fait via les données transientes (`getX`/`setX`).
+
+Il maintient en données transientes :
+
+- **`childProcess`** : Map des processus enfants actifs, indexés par `outputFilename`
+- **`render`** : Fonction watt de communication IPC vers le processus enfant courant
+- **`built`** : Map des bundles Webpack déjà compilés
 
 #### Méthodes publiques
 
-- **`startProcess(id)`** — Démarre un processus enfant de rendu avec l'identifiant spécifié. Chaque processus est isolé et peut traiter des demandes de rendu. Utilise un verrou pour éviter les démarrages simultanés.
-- **`stopProcess(id)`** — Arrête proprement un processus enfant spécifique et libère ses ressources. Le processus est retiré de la collection des processus actifs.
-- **`restartProcesses()`** — Redémarre tous les processus enfants actifs, utile lors de mises à jour de code ou de configuration.
-- **`build(backend, mainGoblin, componentPath, outputPath, outputFilename, publicPath, releasePath)`** — Compile un composant avec Webpack pour un backend spécifique (component, root, ou pdf). Génère un bundle optimisé pour le rendu côté serveur.
-- **`renderComponent(mainGoblin, widgetPath, props, labId, state, forReact, themeContext, currentTheme, isRoot)`** — Rend un composant React en HTML/CSS statique avec support du state Redux et des thèmes. Utilise un verrou pour éviter les conflits de rendu.
-- **`renderPDF(mainGoblin, documentPath, props, outputDir)`** — Génère un fichier PDF à partir d'un composant React PDF. Le processus enfant est automatiquement arrêté après le rendu pour éviter les fuites mémoire.
-- **`renderComponentToFile(mainGoblin, widgetPath, props, labId, state, forReact, themeContext, currentTheme, outputDir, outputName, isRoot)`** — Rend un composant et sauvegarde automatiquement les fichiers HTML et CSS résultants dans le répertoire spécifié.
+- **`startProcess(id)`** — Démarre un processus enfant de rendu identifié par `id`. Utilise un verrou pour éviter les démarrages simultanés. Envoie les requêtes de rendu via IPC et achemine les réponses grâce à une map de callbacks indexée par `requestId`.
 
-### `child-renderer/index.js`
+- **`stopProcess(id)`** — Arrête proprement le processus enfant associé à `id` et le retire de la map des processus actifs.
 
-Point d'entrée du processus enfant qui configure l'environnement de rendu et traite les messages IPC du processus principal. Il charge dynamiquement les renderers et gère les erreurs de rendu.
+- **`restartProcesses()`** — Redémarre tous les processus enfants actifs séquentiellement, utile après une mise à jour de code ou de configuration.
 
-Le processus enfant :
+- **`build(backend, mainGoblin, componentPath, outputPath, outputFilename, publicPath, releasePath)`** — Compile un composant avec Webpack pour un backend spécifique (`component`, `root` ou `pdf`). Le point d'entrée est toujours `child-renderer/render.js` avec des alias `_component` et `_render` injectés dynamiquement. La cible de compilation est `node`.
 
-- Configure l'environnement global pour React
-- Écoute les messages du processus principal
-- Charge dynamiquement le renderer approprié
-- Retourne les résultats ou les erreurs via IPC
+- **`renderComponent(mainGoblin, widgetPath, props, labId, state, forReact, themeContext, currentTheme, isRoot=false)`** — Rend un composant React en HTML/CSS statique. Utilise le renderer `root` si `isRoot` est `true`, sinon `component`. Protégé par un verrou mutex.
 
-### `child-renderer/render.js`
+- **`renderPDF(mainGoblin, documentPath, props, outputDir)`** — Génère un fichier PDF à partir d'un composant React PDF. Le processus enfant est automatiquement arrêté après le rendu (`quest.defer`) pour prévenir les fuites mémoire.
 
-Module principal du processus enfant qui configure l'environnement global pour React et expose la fonction de rendu universelle. Il supprime les références au DOM pour permettre le rendu côté serveur.
+- **`renderComponentToFile(mainGoblin, widgetPath, props, labId, state, forReact, themeContext, currentTheme, outputDir, outputName, isRoot=false)`** — Rend un composant et sauvegarde les fichiers `{outputName}.html` et `{outputName}.css` dans `outputDir`. Retourne les chemins des fichiers générés.
 
-Fonctionnalités clés :
+### `lib/child-renderer/index.js`
 
-- Suppression de `global.window` avant l'import d'Aphrodite
-- Configuration de l'environnement pour react-redux
-- Exposition de la fonction `render` globale
+Point d'entrée du processus enfant. Il configure l'environnement global via `setupGlobals`, puis écoute les messages IPC du processus principal. Pour chaque message reçu, il charge dynamiquement le bundle via `require(args.renderIndex)` (ce qui expose `global.render`), exécute le rendu et retourne le résultat ou l'erreur sérialisée.
 
-### `child-renderer/renderStatic.js`
+Lors du démarrage réussi, il envoie `{started: true}` au processus parent. En cas d'échec lors de l'initialisation, il envoie `{started: false, error: ...}`.
 
-Utilitaire de rendu statique qui utilise Aphrodite pour extraire le CSS et ReactDOMServer pour générer le HTML. Il collecte également les styles injectés dynamiquement dans le document.
+### `lib/child-renderer/render.js`
 
-La fonction `renderStatic` :
+Module principal du bundle Webpack généré pour le processus enfant. Il orchestre les imports dans le bon ordre pour éviter les problèmes de détection d'environnement :
 
-- Utilise `StyleSheetServer.renderStatic` d'Aphrodite
-- Supporte le rendu avec ou sans attributs React
-- Collecte les styles additionnels du document simulé
+1. Suppression de `global.window` avant l'import d'`aphrodite` (qui détecte le navigateur via `global.window`)
+2. Import de `react-redux` (qui détecte le navigateur via `window.document.createElement`)
+3. Appel de `setupGlobals()` pour recréer un environnement DOM simulé
+4. Exposition de `global.render` qui délègue au renderer spécifique (`_render`)
 
-### `child-renderer/setupGlobals.js`
+### `lib/child-renderer/renderStatic.js`
 
-Configure un environnement DOM simulé pour permettre l'exécution de composants React côté serveur. Il crée des objets `window`, `document`, et `navigator` minimaux.
+Utilitaire de rendu statique combinant Aphrodite et ReactDOMServer.
+
+**`renderStatic(element, forReact=false)`** — Rend un élément React en HTML statique et extrait le CSS généré par Aphrodite. Collecte également les styles injectés dans `global.document.head` par d'autres mécanismes. Le paramètre `forReact` bascule entre `renderToString` (avec attributs React pour l'hydratation) et `renderToStaticMarkup` (HTML pur).
+
+### `lib/child-renderer/setupGlobals.js`
+
+Configure un environnement DOM minimal pour permettre l'exécution de bibliothèques React dans un contexte Node.js. Crée les objets globaux `document`, `navigator` et `window` avec les propriétés minimales nécessaires.
 
 Objets simulés :
 
-- **`document`** : Avec `createElement`, `head`, et gestion des événements
-- **`navigator`** : Avec support de la langue et de la plateforme
-- **`window`** : Avec `location`, `history`, et référence au document
+- **`document`** : Avec `createElement`, gestion du `head` (pour la collecte des styles) et des événements
+- **`navigator`** : Avec `platform`, `userAgent` et `language` (configurable, défaut `fr-CH`)
+- **`window`** : Avec `screen`, `location`, `history`, `isBrowser: true` et références croisées
 
-### `child-renderer/store.js`
+### `lib/child-renderer/store.js`
 
-Configure un store Redux pour le rendu avec les reducers de goblin-laboratory. Il convertit l'état initial en structures Immutable.js compatibles.
+Configure un store Redux pour le rendu avec les reducers de [goblin-laboratory]. Convertit l'état initial en structures Immutable.js via `fromJS` avant de créer le store.
 
 Reducers inclus :
 
-- **`widgets`** : Gestion des états des widgets
-- **`backend`** : Gestion des données backend
-- Support des structures Immutable.js
+- **`widgets`** : Gestion des états des widgets (depuis `goblin-laboratory`)
+- **`backend`** : Gestion des données backend (depuis `goblin-laboratory`)
 
 ### Fichiers spéciaux (renderers)
 
-#### `renderers/component.js`
+#### `lib/child-renderer/renderers/component.js`
 
-Renderer pour les composants standards avec support complet du state Redux, des thèmes, et du Frame de goblin-laboratory.
+Renderer pour les composants standards. Si un `state` Redux est fourni, le composant est enveloppé dans un `Frame` de [goblin-laboratory] qui injecte le store, le thème et le contexte thématique. Sans état, le composant est rendu directement. Le cache de styles est vidé avant chaque rendu via `clearStylesCache`.
 
-Fonctionnalités :
+#### `lib/child-renderer/renderers/pdf.js`
 
-- Support du Frame pour l'injection du store Redux
-- Gestion des thèmes et du contexte thématique
-- Nettoyage du cache de styles avant chaque rendu
-- Rendu avec ou sans état Redux
+Renderer spécialisé pour la génération de PDF utilisant `@react-pdf/renderer`. Requiert un `outputDir` obligatoire (chemin complet du fichier PDF de sortie). Utilise `ReactPDF.render` pour générer directement le fichier.
 
-#### `renderers/pdf.js`
+#### `lib/child-renderer/renderers/root.js`
 
-Renderer spécialisé pour la génération de PDF utilisant @react-pdf/renderer. Il traite les composants PDF et génère directement les fichiers de sortie.
+Renderer pour les composants racine d'application. Contrairement au renderer `component`, il ne passe pas par `Frame` : le composant racine reçoit directement le store Redux et le `labId` comme props. Le cache de styles est vidé avant chaque rendu.
 
-Spécificités :
+## Licence
 
-- Utilise `@react-pdf/renderer` pour la génération PDF
-- Requiert un répertoire de sortie obligatoire
-- Gestion d'erreurs spécifique aux documents PDF
-
-#### `renderers/root.js`
-
-Renderer pour les composants racine d'application, similaire au renderer de composant mais optimisé pour les éléments de plus haut niveau.
-
-Différences avec le renderer de composant :
-
-- Pas de support du Frame (le composant racine gère son propre store)
-- Optimisé pour les composants de niveau application
-- Nettoyage du cache de styles
+Ce module est distribué sous [licence MIT](./LICENSE).
 
 ---
 
-_Document mis à jour_
+_Ce contenu a été généré par IA_
 
 [goblin-laboratory]: https://github.com/Xcraft-Inc/goblin-laboratory
 [goblin-webpack]: https://github.com/Xcraft-Inc/goblin-webpack
 [xcraft-core-process]: https://github.com/Xcraft-Inc/xcraft-core-process
 [xcraft-core-etc]: https://github.com/Xcraft-Inc/xcraft-core-etc
 [xcraft-core-fs]: https://github.com/Xcraft-Inc/xcraft-core-fs
+[xcraft-core-host]: https://github.com/Xcraft-Inc/xcraft-core-host
+[xcraft-core-utils]: https://github.com/Xcraft-Inc/xcraft-core-utils
